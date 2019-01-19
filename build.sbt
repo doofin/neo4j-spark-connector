@@ -26,3 +26,9 @@ libraryDependencies += "org.neo4j.test" % "neo4j-harness" % "3.5.1"
 libraryDependencies += "io.netty" % "netty-all" % "4.1.30.Final"
  
 libraryDependencies += "org.bouncycastle" % "bcprov-jdk15on" % "1.53"
+
+organization := "neo4j-contrib"
+name := "neo4j-spark-connector"
+version := "0.2-SNAPSHOT"
+
+// "neo4j-contrib"              %% "neo4j-spark-connector" % "0.2-SNAPSHOT"
