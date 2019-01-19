@@ -11,13 +11,13 @@ scalaVersion in ThisBuild := thisScalaVersion
  
 libraryDependencies += "org.neo4j.driver" % "neo4j-java-driver" % "1.7.2"
  
-libraryDependencies += "org.apache.spark" % "spark-core" % "2.4.0"
+libraryDependencies += "org.apache.spark" %% "spark-core" % "2.4.0"
  
-libraryDependencies += "org.apache.spark" % "spark-graphx" % "2.4.0"
+libraryDependencies += "org.apache.spark" %% "spark-graphx" % "2.4.0"
  
-libraryDependencies += "org.apache.spark" % "spark-sql" % "2.4.0"
+libraryDependencies += "org.apache.spark" %% "spark-sql" % "2.4.0"
  
-libraryDependencies += "org.graphframes" % "graphframes" % "0.7.1-SNAPSHOT-spark-gf"
+libraryDependencies += "org.graphframes" %% "graphframes" % "0.7.1-SNAPSHOT-spark-gf"
  
 libraryDependencies += "junit" % "junit" % "4.12"
  

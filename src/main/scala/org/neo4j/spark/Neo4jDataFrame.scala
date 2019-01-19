@@ -24,15 +24,16 @@ object Neo4jDataFrame {
       """
     val partitions = Math.max(1,(dataFrame.count() / 10000).asInstanceOf[Int])
     val config = Neo4jConfig(sc.getConf)
-    dataFrame.repartition(partitions).foreachPartition( rows => {
+    dataFrame.repartition(partitions).foreachPartition{rows: Iterator[Row] =>
       val params: AnyRef = rows.map(r =>
-        Map(
-          "source" -> source._2.map( c => (c, r.getAs[AnyRef](c))).toMap.asJava,
-          "target" -> target._2.map( c => (c, r.getAs[AnyRef](c))).toMap.asJava,
-          "relationship" -> relationship._2.map( c => (c, r.getAs[AnyRef](c))).toMap.asJava)
-          .asJava).asJava
-          execute(config, mergeStatement, Map("rows" -> params).asJava, write = true)
-    })
+      Map(
+        "source" -> source._2.map( c => (c, r.getAs[AnyRef](c))).toMap.asJava,
+        "target" -> target._2.map( c => (c, r.getAs[AnyRef](c))).toMap.asJava,
+        "relationship" -> relationship._2.map( c => (c, r.getAs[AnyRef](c))).toMap.asJava)
+        .asJava).asJava
+      execute(config, mergeStatement, Map("rows" -> params).asJava, write = true)
+      ()
+    }
   }
 
   def execute(config : Neo4jConfig, query: String, parameters: java.util.Map[String, AnyRef], write: Boolean = false) : ResultSummary = {
@@ -92,11 +93,6 @@ object Neo4jDataFrame {
   class Neo4jResultRdd(@transient sc: SparkContext, result : Iterator[Record], keyCount : Int, session: Session, driver:Driver)
   extends RDD[Row](sc, Nil) {
 
-    def convert(value: AnyRef) = value match {
-      case m: java.util.Map[_,_] => m.asScala
-      case _ => value
-    }
-
   override def compute(split: Partition, context: TaskContext): Iterator[Row] = {
     result.map(record => {
       val res = keyCount match {
@@ -120,6 +116,11 @@ object Neo4jDataFrame {
     })
   }
 
+    def convert(value: AnyRef) = value match {
+      case m: java.util.Map[_,_] => m.asScala
+      case _ => value
+    }
+
   override protected def getPartitions: Array[Partition] = Array(new Neo4jPartition())
 }
 
@@ -133,6 +134,43 @@ object CypherTypes {
   val NULL = DataTypes.NullType
   val DATETIME = DataTypes.TimestampType
   val DATE = DataTypes.DateType
+
+  def field(keyType: (String, Type)): StructField = {
+    StructField(keyType._1, CypherTypes.toSparkType(InternalTypeSystem.TYPE_SYSTEM, keyType._2))
+  }
+
+  def toSparkType(typeSystem : TypeSystem, typ : Type): org.apache.spark.sql.types.DataType =
+    if (typ == typeSystem.BOOLEAN()) CypherTypes.BOOLEAN
+    else if (typ == typeSystem.STRING()) CypherTypes.STRING
+    else if (typ == typeSystem.INTEGER()) CypherTypes.INTEGER
+    else if (typ == typeSystem.FLOAT()) CypherTypes.FlOAT
+    else if (typ == typeSystem.NULL()) CypherTypes.NULL
+    else CypherTypes.STRING
+
+//  val MAP = edges.MapType(edges.StringType,edges.AnyDataType)
+//  val LIST = edges.ArrayType(edges.AnyDataType)
+// , MAP, LIST, NODE, RELATIONSHIP, PATH
+
+  def schemaFromNamedType(schemaInfo: Seq[(String, String)]) = {
+    val fields = schemaInfo.map(field =>
+      StructField(field._1, CypherTypes(field._2), nullable = true) )
+    StructType(fields)
+  }
+  //    type match {
+  //    case typeSystem.MAP => edges.MapType(edges.StringType,edges.ObjectType)
+  //    case typeSystem.LIST => edges.ArrayType(edges.ObjectType, containsNull = false)
+  //    case typeSystem.NODE => edges.VertexType
+  //    case typeSystem.RELATIONSHIP => edges.EdgeType
+  //    case typeSystem.PATH => edges.GraphType
+  //    case _ => edges.StringType
+  //  }
+
+  def apply(typ: String): DataType =
+    (typ.charAt(0), typ.substring(1, typ.length - 1), typ.charAt(typ.length - 1)) match {
+      case ('[', inner, ']') => DataTypes.createArrayType(typeOf(inner), true)
+      case ('{', inner, '}') => DataTypes.createMapType(STRING, typeOf(inner), true)
+      case _  => typeOf(typ)
+    }
 
   def typeOf(typ: String) : DataType = typ.toUpperCase match {
     case "LONG" => INTEGER
@@ -150,42 +188,6 @@ object CypherTypes {
     case _ => STRING
   }
 
-  def apply(typ: String): DataType =
-    (typ.charAt(0), typ.substring(1, typ.length - 1), typ.charAt(typ.length - 1)) match {
-      case ('[', inner, ']') => DataTypes.createArrayType(typeOf(inner), true)
-      case ('{', inner, '}') => DataTypes.createMapType(STRING, typeOf(inner), true)
-      case _  => typeOf(typ)
-    }
-
-//  val MAP = edges.MapType(edges.StringType,edges.AnyDataType)
-//  val LIST = edges.ArrayType(edges.AnyDataType)
-// , MAP, LIST, NODE, RELATIONSHIP, PATH
-
-
-  def toSparkType(typeSystem : TypeSystem, typ : Type): org.apache.spark.sql.types.DataType =
-    if (typ == typeSystem.BOOLEAN()) CypherTypes.BOOLEAN
-    else if (typ == typeSystem.STRING()) CypherTypes.STRING
-    else if (typ == typeSystem.INTEGER()) CypherTypes.INTEGER
-    else if (typ == typeSystem.FLOAT()) CypherTypes.FlOAT
-    else if (typ == typeSystem.NULL()) CypherTypes.NULL
-    else CypherTypes.STRING
-  //    type match {
-  //    case typeSystem.MAP => edges.MapType(edges.StringType,edges.ObjectType)
-  //    case typeSystem.LIST => edges.ArrayType(edges.ObjectType, containsNull = false)
-  //    case typeSystem.NODE => edges.VertexType
-  //    case typeSystem.RELATIONSHIP => edges.EdgeType
-  //    case typeSystem.PATH => edges.GraphType
-  //    case _ => edges.StringType
-  //  }
-
-  def field(keyType: (String, Type)): StructField = {
-    StructField(keyType._1, CypherTypes.toSparkType(InternalTypeSystem.TYPE_SYSTEM, keyType._2))
-  }
-  def schemaFromNamedType(schemaInfo: Seq[(String, String)]) = {
-    val fields = schemaInfo.map(field =>
-      StructField(field._1, CypherTypes(field._2), nullable = true) )
-    StructType(fields)
-  }
   def schemaFromDataType(schemaInfo: Seq[(String, DataType)]) = {
     val fields = schemaInfo.map(field =>
       StructField(field._1, field._2, nullable = true) )
